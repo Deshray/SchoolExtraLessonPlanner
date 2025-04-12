@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>School Timetable Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="logo">
+        <img src="{{ url_for('static', filename='cislogo.jpg') }}" alt="School Logo">
+    </div>
+
+    <div class="container">
+        <h1>School Timetable Management</h1>
+        <div>
+            <h2>Book a Period</h2>
+            <div class="input-group">
+                <label for="registration_number">Registration Number:</label>
+                <input type="text" id="registration_number" />
+            </div>
+            <div class="input-group">
+                <label for="date">Date (DD/MM/YYYY):</label>
+                <input type="text" id="date" placeholder="DD/MM/YYYY"/>
+                <div id="date_error" class="error"></div>
+            </div>
+            <div class="input-group">
+                <label for="period">Period (1-9):</label>
+                <input type="text" id="period" />
+            </div>
+            <button id="find_teachers_button">Find Free Teachers</button>
+            <div class="input-group">
+                <label for="teacher">Teacher:</label>
+                <select id="teacher">
+                    <option value="">Select a Teacher</option>
+                </select>
+            </div>
+            <button id="book_period_button" disabled>Book Period</button>
+            <div id="book_result" class="success"></div>
+        </div>
+        <hr />
+        <div>
+            <h2>Cancel a Period</h2>
+            <div class="input-group">
+                <label for="cancel_registration_number">Registration Number:</label>
+                <input type="text" id="cancel_registration_number" />
+            </div>
+            <button id="fetch_bookings_button">Fetch Bookings</button>
+            <div class="input-group">
+                <label for="booking_code">Booking Code:</label>
+                <select id="booking_code">
+                    <option value="">Select a Booking</option>
+                </select>
+            </div>
+            <button id="cancel_period_button" disabled>Cancel Period</button>
+            <div id="cancel_result" class="success"></div>
+            <div id="fetch_result" class="error"></div>
+        </div>
+    </div>
+    
+    <script>
+        function formatDate(dateStr) {
+            const [day, month, year] = dateStr.split('/');
+            return `${year}-${month}-${day}`; // Convert to YYYY-MM-DD format for backend processing
+        }
+
+        function isValidDate(dateStr) {
+            const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+            const match = dateStr.match(regex);
+            if (match) {
+                const day = parseInt(match[1], 10);
+                const month = parseInt(match[2], 10);
+                const year = parseInt(match[3], 10);
+
+                if (month < 1 || month > 12) return false;
+                const daysInMonth = new Date(year, month, 0).getDate();
+                return day > 0 && day <= daysInMonth;
+            }
+            return false;
+        }
+
+        document.getElementById('find_teachers_button').addEventListener('click', function() {
+            const date = document.getElementById('date').value;
+            const period = document.getElementById('period').value;
+
+            if (!isValidDate(date)) {
+                document.getElementById('date_error').textContent = 'Please enter a valid date in DD/MM/YYYY format.';
+                return;
+            } else {
+                document.getElementById('date_error').textContent = '';
+            }
+
+            fetch('/get_free_teachers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ date: formatDate(date), period })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const teacherSelect = document.getElementById('teacher');
+                teacherSelect.innerHTML = '<option value="">Select a Teacher</option>';
+                data.forEach(teacher => {
+                    const option = document.createElement('option');
+                    option.value = teacher;
+                    option.textContent = teacher;
+                    teacherSelect.appendChild(option);
+                });
+                document.getElementById('book_period_button').disabled = false;
+            });
+        });
+
+        document.getElementById('book_period_button').addEventListener('click', function() {
+            const registration_number = document.getElementById('registration_number').value;
+            const date = document.getElementById('date').value;
+            const period = document.getElementById('period').value;
+            const teacher_name = document.getElementById('teacher').value;
+
+            if (!isValidDate(date)) {
+                document.getElementById('date_error').textContent = 'Please enter a valid date in DD/MM/YYYY format.';
+                return;
+            } else {
+                document.getElementById('date_error').textContent = '';
+            }
+
+            fetch('/book_period', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ registration_number, date: formatDate(date), period, teacher_name })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('book_result').textContent = data.message;
+                // Clear input fields
+                document.getElementById('registration_number').value = '';
+                document.getElementById('date').value = '';
+                document.getElementById('period').value = '';
+                document.getElementById('teacher').innerHTML = '<option value="">Select a Teacher</option>';
+                document.getElementById('book_period_button').disabled = true;
+            })
+            .catch(error => {
+                document.getElementById('book_result').textContent = 'Error: ' + error.message;
+            });
+        });
+
+        document.getElementById('fetch_bookings_button').addEventListener('click', function() {
+            const registration_number = document.getElementById('cancel_registration_number').value;
+
+            fetch('/get_bookings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ registration_number })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const bookingSelect = document.getElementById('booking_code');
+                bookingSelect.innerHTML = '<option value="">Select a Booking</option>';
+                data.forEach(booking => {
+                    const option = document.createElement('option');
+                    option.value = booking.booking_code;
+                    option.textContent = `${booking.teacher_name} on ${booking.date} during period ${booking.period}`;
+                    bookingSelect.appendChild(option);
+                });
+                document.getElementById('cancel_period_button').disabled = false;
+                document.getElementById('fetch_result').textContent = '';
+            })
+            .catch(error => {
+                document.getElementById('fetch_result').textContent = 'Error: ' + error.message;
+            });
+        });
+
+        document.getElementById('cancel_period_button').addEventListener('click', function() {
+            const registration_number = document.getElementById('cancel_registration_number').value;
+            const booking_code = document.getElementById('booking_code').value;
+
+            fetch('/cancel_period', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ registration_number, booking_code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('cancel_result').textContent = data.message;
+                // Clear input fields
+                document.getElementById('cancel_registration_number').value = '';
+                document.getElementById('booking_code').innerHTML = '<option value="">Select a Booking</option>';
+                document.getElementById('cancel_period_button').disabled = true;
+            })
+            .catch(error => {
+                document.getElementById('cancel_result').textContent = 'Error: ' + error.message;
+            });
+        });
+    </script>
+</body>
+</html>
